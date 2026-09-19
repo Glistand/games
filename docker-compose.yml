@@ -1,0 +1,14 @@
+# Local smoke test:
+#   docker compose up --build
+# Open http://localhost:8080
+#
+# Behind Caddy/nginx on the server, proxy to this service:8080
+# (TLS + domain stay on the reverse proxy).
+
+services:
+  game:
+    build: .
+    image: ${IMAGE:-lena2:latest}
+    ports:
+      - "${PORT:-8080}:8080"
+    restart: unless-stopped

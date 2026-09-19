@@ -1,0 +1,60 @@
+name: GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pygbag
+        run: pip install --no-cache-dir "pygbag==0.9.3"
+
+      - name: Build web
+        run: |
+          mkdir -p game
+          cp main.py game.py gfx.py levels.py settings.py ui.py favicon.png game/
+          python -m pygbag \
+            --build \
+            --app_name lena2 \
+            --package org.bch.lena2 \
+            --title "Поезд БЧ" \
+            --template docker/default.tmpl \
+            --icon game/favicon.png \
+            --cdn /games/cdn/0.9.3/ \
+            --ume_block 1 \
+            game
+          cp -a docker/cdn game/build/web/cdn
+          cp docker/browserfs.min.js game/build/web/
+          touch game/build/web/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: game/build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

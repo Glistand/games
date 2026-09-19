@@ -1,0 +1,16 @@
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+.idea
+.graphify-out
+graphify-out
+build
+**/build
+.git
+.gitignore
+settings.json
+uv.lock
+*.md
+.cursor
+**/.pytest_cache

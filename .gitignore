@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.idea/
+graphify-out/
+build/
+**/build/
+settings.json
+uv.lock
+.cursor/
+.pytest_cache/
+*.md
+!README.md
+.env
+*.apk
+*.tar.gz
