@@ -8,12 +8,12 @@ import pygame
 
 from levels import W, H
 
-# Button geometry (logical 900×700)
-_PAD = 18
-_BTN = 78
-_GAP = 14
-_JUMP = 96
-_PAUSE = 52
+# Button geometry (logical 900×700) — large enough for phones (S25+ etc.)
+_PAD = 28
+_BTN = 128
+_GAP = 24
+_JUMP = 148
+_PAUSE = 80
 
 
 @dataclass
@@ -153,8 +153,8 @@ class TouchControls:
     def draw(self, surf: pygame.Surface) -> None:
         if not self.visible:
             return
-        font = pygame.font.SysFont("Segoe UI", 36, bold=True)
-        small = pygame.font.SysFont("Segoe UI", 28, bold=True)
+        font = pygame.font.SysFont("Segoe UI", 56, bold=True)
+        small = pygame.font.SysFont("Segoe UI", 40, bold=True)
         for rect, label, active in (
             (self.left_rect, "◀", any(a == "left" for a in self._held.values())),
             (self.right_rect, "▶", any(a == "right" for a in self._held.values())),
@@ -162,9 +162,12 @@ class TouchControls:
             (self.pause_rect, "II", any(a == "pause" for a in self._held.values())),
         ):
             overlay = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA)
-            alpha = 160 if active else 100
-            pygame.draw.rect(overlay, (20, 40, 70, alpha), overlay.get_rect(), border_radius=16)
-            pygame.draw.rect(overlay, (180, 220, 255, 200), overlay.get_rect(), 2, border_radius=16)
+            alpha = 190 if active else 130
+            radius = 22 if rect is self.pause_rect else 28
+            pygame.draw.rect(overlay, (20, 40, 70, alpha), overlay.get_rect(), border_radius=radius)
+            pygame.draw.rect(
+                overlay, (180, 220, 255, 220), overlay.get_rect(), 3, border_radius=radius
+            )
             surf.blit(overlay, rect.topleft)
             f = small if rect is self.pause_rect else font
             text = f.render(label, True, (245, 250, 255))
