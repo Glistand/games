@@ -69,7 +69,9 @@ class UI:
         tr = title.get_rect(center=(W // 2, int(130 + 6 * math.sin(self.title_t * 3))))
         surf.blit(title, tr)
         sub = self.small.render(
-            "Управляй поездом БЧ: прыгай по платформам, собирай монеты!", True, (210, 230, 255)
+            "Тач: ◀ ▶ и прыжок · Клавиатура: стрелки / WASD / пробел",
+            True,
+            (210, 230, 255),
         )
         surf.blit(sub, sub.get_rect(center=(W // 2, 200)))
 

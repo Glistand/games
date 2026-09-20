@@ -9,7 +9,7 @@ FROM python:3.12-bookworm AS build
 WORKDIR /work
 RUN pip install --no-cache-dir "pygbag==0.9.3"
 
-COPY main.py game.py gfx.py levels.py settings.py ui.py favicon.png /work/game/
+COPY main.py game.py gfx.py levels.py settings.py ui.py controls.py favicon.png /work/game/
 COPY docker/default.tmpl /work/default.tmpl
 
 # Same-origin CDN path — no pygame-web.github.io in the browser

@@ -7,6 +7,7 @@ import sys
 
 import pygame
 
+from controls import TouchControls, keyboard_input, merge_input
 from game import FPS, Game
 from gfx import Audio, clear_gfx_caches, make_train_sprite, build_background
 from levels import LEVELS, W, H, get_level, signal_phase
@@ -39,6 +40,7 @@ class App:
         self.pending_state: str | None = None
         self._buttons: list = []
         self._slider_drag = False
+        self.touch = TouchControls(visible=False)
 
     def apply_display(self) -> None:
         if IS_WEB:
@@ -57,6 +59,25 @@ class App:
         self.level_id = level_id
         self.game = Game(get_level(level_id), self.settings, self.audio)
         self.fade_to("play")
+
+    def _sync_touch_visibility(self) -> None:
+        show = IS_WEB and self.state in ("play", "pause")
+        if self.touch.visible and not show:
+            self.touch.reset()
+        self.touch.visible = show
+
+    def _handle_ui_press(self, pos: tuple[int, int]) -> bool:
+        """Menu/settings/pause/result click. Returns whether app should keep running."""
+        if self.state == "settings":
+            if self.ui.handle_slider_drag(self.settings, pos):
+                self._slider_drag = True
+                self.audio.set_sfx_vol(self.settings.sfx_vol)
+                self.audio.set_music_vol(self.settings.music_vol)
+                return True
+            return self.handle_action(hit_button(self._buttons, pos))
+        if self.state != "play":
+            return self.handle_action(hit_button(self._buttons, pos))
+        return True
 
     def handle_action(self, action: str | None) -> bool:
         if not action:
@@ -125,6 +146,7 @@ class App:
 
     def update(self, dt: float) -> None:
         self.ui.update(dt)
+        self._sync_touch_visibility()
 
         if self.fade_dir != 0:
             self.fade += self.fade_dir * dt / 0.25
@@ -139,10 +161,19 @@ class App:
                 self.fade_dir = 0
 
         if self.state == "play" and self.game:
-            self.game.update(dt)
+            inp = merge_input(keyboard_input(), self.touch.poll())
+            if inp.pause_tap:
+                self.state = "pause"
+                self.touch.reset()
+                return
+            self.game.update(dt, inp)
             if self.game.state in ("win", "lose"):
                 self.audio.play_theme("win" if self.game.state == "win" else "lose")
                 self.state = "result"
+        elif self.state == "pause":
+            if self.touch.poll().pause_tap:
+                self.state = "play"
+                self.touch.reset()
 
     def draw(self) -> None:
         if self.state == "menu":
@@ -162,6 +193,8 @@ class App:
                 )
             else:
                 self._buttons = []
+            if self.state in ("play", "pause"):
+                self.touch.draw(self.screen)
         else:
             self.screen.fill((20, 30, 50))
             self._buttons = []
@@ -181,12 +214,19 @@ class App:
             for e in pygame.event.get():
                 if e.type == pygame.QUIT:
                     running = False
-                elif e.type == pygame.KEYDOWN:
+                    continue
+
+                if self.touch.handle_event(e):
+                    continue
+
+                if e.type == pygame.KEYDOWN:
                     if e.key == pygame.K_ESCAPE:
                         if self.state == "play":
                             self.state = "pause"
+                            self.touch.reset()
                         elif self.state == "pause":
                             self.state = "play"
+                            self.touch.reset()
                         elif self.state in ("settings", "levels"):
                             if self.state == "settings":
                                 self.settings.save()
@@ -198,17 +238,7 @@ class App:
                         self.audio.play_theme("main")
                         self.state = "play"
                 elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
-                    if self.state == "settings":
-                        if self.ui.handle_slider_drag(self.settings, e.pos):
-                            self._slider_drag = True
-                            self.audio.set_sfx_vol(self.settings.sfx_vol)
-                            self.audio.set_music_vol(self.settings.music_vol)
-                        else:
-                            action = hit_button(self._buttons, e.pos)
-                            running = self.handle_action(action)
-                    elif self.state != "play":
-                        action = hit_button(self._buttons, e.pos)
-                        running = self.handle_action(action)
+                    running = self._handle_ui_press(e.pos)
                 elif e.type == pygame.MOUSEBUTTONUP and e.button == 1:
                     if self._slider_drag:
                         self.settings.save()
@@ -237,7 +267,6 @@ def _selfcheck() -> None:
         assert len(lv.coins) > 0
         assert lv.lives >= 1
 
-    # winter level must have snow from the start
     assert LEVELS[4].zones[0].weather == "snow"
     assert LEVELS[4].zones[0].theme == "dusk"
     assert LEVELS[1].zones[0].theme == "forest"
@@ -266,12 +295,6 @@ def _selfcheck() -> None:
 
     s = Settings()
     g = Game(LEVELS[0], s, None)
-    # move and jump
-    class K:
-        def __getitem__(self, k):
-            return k in (pygame.K_RIGHT,)
-
-    # manual tick without keys mock — call physics bits
     g.train.vx = 100
     g.train.on_ground = True
     g._jump_buf = 0.1
@@ -284,7 +307,6 @@ def _selfcheck() -> None:
     font = pygame.font.SysFont("Segoe UI", 20)
     g.draw(screen, font)
 
-    # crumble breaks underfoot
     crum = next(p for p in g._plats if p.kind == "crumble")
     g.train.x = crum.x + crum.w / 2
     g.train.y = crum.y
@@ -303,6 +325,15 @@ def _selfcheck() -> None:
         g.update(1 / 60)
     assert crum.gone > 0 or not crum.is_solid(g.time)
 
+    from controls import InputState, TouchControls
+
+    tc = TouchControls(visible=True)
+    down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": tc.jump_rect.center})
+    assert tc.handle_event(down)
+    assert tc.poll().jump
+    up = pygame.event.Event(pygame.MOUSEBUTTONUP, {"button": 1, "pos": tc.jump_rect.center})
+    assert tc.handle_event(up)
+
     ui = UI()
     ui.draw_menu(screen)
     ui.draw_levels(screen)
@@ -311,7 +342,7 @@ def _selfcheck() -> None:
     for lv in LEVELS:
         gg = Game(lv, s, None)
         for _ in range(15):
-            gg.update(1 / 60)
+            gg.update(1 / 60, InputState())
         gg.draw(screen, font)
 
     pygame.quit()

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 import pygame
 
+from controls import InputState, keyboard_input
 from gfx import (
     Audio,
     Particle,
@@ -307,7 +308,7 @@ class Game:
                 )
                 break
 
-    def update(self, dt: float) -> None:
+    def update(self, dt: float, inp: InputState | None = None) -> None:
         if self.state != "playing":
             self.time += dt
             self.weather.update(dt)
@@ -317,16 +318,13 @@ class Game:
                 self.shake = max(0.0, self.shake - dt)
             return
 
+        if inp is None:
+            inp = keyboard_input()
+
         self.time += dt
-        keys = pygame.key.get_pressed()
-        left = keys[pygame.K_LEFT] or keys[pygame.K_a]
-        right = keys[pygame.K_RIGHT] or keys[pygame.K_d]
-        jump_held = (
-            keys[pygame.K_SPACE]
-            or keys[pygame.K_UP]
-            or keys[pygame.K_w]
-            or keys[pygame.K_k]
-        )
+        left = inp.left
+        right = inp.right
+        jump_held = inp.jump
 
         if jump_held:
             self._jump_buf = 0.14
