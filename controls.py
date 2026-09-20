@@ -8,13 +8,6 @@ import pygame
 
 from levels import W, H
 
-# Button geometry (logical 900×700) — large enough for phones (S25+ etc.)
-_PAD = 28
-_BTN = 128
-_GAP = 24
-_JUMP = 148
-_PAUSE = 80
-
 
 @dataclass
 class InputState:
@@ -29,23 +22,36 @@ class InputState:
 
 @dataclass
 class TouchControls:
-    """On-screen pads for web/mobile. Tracks held pointers by finger id / mouse."""
+    """On-screen pads in *screen* pixels (device-sized)."""
 
     visible: bool = False
+    sw: int = W
+    sh: int = H
     left_rect: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
     right_rect: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
     jump_rect: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
     pause_rect: pygame.Rect = field(default_factory=lambda: pygame.Rect(0, 0, 0, 0))
-    # pointer id -> action name currently held
     _held: dict[int, str] = field(default_factory=dict)
     _pause_armed: set[int] = field(default_factory=set)
 
     def __post_init__(self) -> None:
-        y = H - _PAD - _BTN
-        self.left_rect = pygame.Rect(_PAD, y, _BTN, _BTN)
-        self.right_rect = pygame.Rect(_PAD + _BTN + _GAP, y, _BTN, _BTN)
-        self.jump_rect = pygame.Rect(W - _PAD - _JUMP, H - _PAD - _JUMP, _JUMP, _JUMP)
-        self.pause_rect = pygame.Rect(W - _PAD - _PAUSE, _PAD, _PAUSE, _PAUSE)
+        self.layout(self.sw, self.sh)
+
+    def layout(self, sw: int, sh: int) -> None:
+        """Size pads from the shorter screen side so they stay fat-finger friendly."""
+        self.sw = max(1, sw)
+        self.sh = max(1, sh)
+        short = min(self.sw, self.sh)
+        pad = max(20, int(short * 0.035))
+        btn = max(110, int(short * 0.15))
+        gap = max(16, int(short * 0.025))
+        jump = max(128, int(short * 0.175))
+        pause = max(64, int(short * 0.09))
+        y = self.sh - pad - btn
+        self.left_rect = pygame.Rect(pad, y, btn, btn)
+        self.right_rect = pygame.Rect(pad + btn + gap, y, btn, btn)
+        self.jump_rect = pygame.Rect(self.sw - pad - jump, self.sh - pad - jump, jump, jump)
+        self.pause_rect = pygame.Rect(self.sw - pad - pause, pad, pause, pause)
 
     def reset(self) -> None:
         self._held.clear()
@@ -63,8 +69,7 @@ class TouchControls:
         return None
 
     def _finger_pos(self, e: pygame.event.Event) -> tuple[int, int]:
-        # FINGER* events use normalized 0..1 coords
-        return (int(e.x * W), int(e.y * H))
+        return (int(e.x * self.sw), int(e.y * self.sh))
 
     def handle_event(self, e: pygame.event.Event) -> bool:
         """Update held state. Returns True if event was consumed by overlay."""
@@ -141,20 +146,19 @@ class TouchControls:
         left = any(a == "left" for a in self._held.values())
         right = any(a == "right" for a in self._held.values())
         jump = any(a == "jump" for a in self._held.values())
-        # pause fires once when pressed (armed on down, consumed here)
         pause_tap = False
         for pid in list(self._pause_armed):
             if self._held.get(pid) == "pause":
                 pause_tap = True
                 self._pause_armed.discard(pid)
-                # keep held so we don't re-fire until release
         return InputState(left=left, right=right, jump=jump, pause_tap=pause_tap)
 
     def draw(self, surf: pygame.Surface) -> None:
         if not self.visible:
             return
-        font = pygame.font.SysFont("Segoe UI", 56, bold=True)
-        small = pygame.font.SysFont("Segoe UI", 40, bold=True)
+        short = min(self.sw, self.sh)
+        font = pygame.font.SysFont("Segoe UI", max(40, int(short * 0.07)), bold=True)
+        small = pygame.font.SysFont("Segoe UI", max(28, int(short * 0.045)), bold=True)
         for rect, label, active in (
             (self.left_rect, "◀", any(a == "left" for a in self._held.values())),
             (self.right_rect, "▶", any(a == "right" for a in self._held.values())),
@@ -163,7 +167,7 @@ class TouchControls:
         ):
             overlay = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA)
             alpha = 190 if active else 130
-            radius = 22 if rect is self.pause_rect else 28
+            radius = max(16, rect.w // 6)
             pygame.draw.rect(overlay, (20, 40, 70, alpha), overlay.get_rect(), border_radius=radius)
             pygame.draw.rect(
                 overlay, (180, 220, 255, 220), overlay.get_rect(), 3, border_radius=radius

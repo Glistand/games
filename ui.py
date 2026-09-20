@@ -55,7 +55,7 @@ class UI:
             Button(pygame.Rect(cx - 140, 420, 280, 54), "Выход", "quit"),
         ]
 
-    def draw_menu(self, surf: pygame.Surface) -> list[Button]:
+    def draw_menu(self, surf: pygame.Surface, mouse: tuple[int, int] | None = None) -> list[Button]:
         import math
 
         from gfx import build_background, make_train_sprite
@@ -79,7 +79,8 @@ class UI:
         surf.blit(spr, spr.get_rect(center=(W // 2, 250)))
 
         buttons = self.menu_buttons()
-        mouse = pygame.mouse.get_pos()
+        if mouse is None:
+            mouse = pygame.mouse.get_pos()
         for b in buttons:
             self._btn(surf, b, mouse)
         return buttons
@@ -101,7 +102,7 @@ class UI:
         buttons.append(Button(pygame.Rect(W // 2 - 100, H - 90, 200, 48), "Назад", "back"))
         return buttons
 
-    def draw_levels(self, surf: pygame.Surface) -> list[Button]:
+    def draw_levels(self, surf: pygame.Surface, mouse: tuple[int, int] | None = None) -> list[Button]:
         from gfx import build_background
 
         surf.blit(build_background("forest", W, H), (0, 0))
@@ -111,7 +112,8 @@ class UI:
         title = self.big.render("Уровни", True, (255, 240, 200))
         surf.blit(title, title.get_rect(center=(W // 2, 80)))
         buttons = self.level_buttons()
-        mouse = pygame.mouse.get_pos()
+        if mouse is None:
+            mouse = pygame.mouse.get_pos()
         theme_ru = {
             "meadow": "поляна",
             "forest": "лес",
@@ -158,7 +160,7 @@ class UI:
             Button(pygame.Rect(W // 2 - 100, H - 90, 200, 48), "Назад", "back"),
         ]
 
-    def draw_settings(self, surf: pygame.Surface, settings: Settings) -> list[Button]:
+    def draw_settings(self, surf: pygame.Surface, settings: Settings, mouse: tuple[int, int] | None = None) -> list[Button]:
         from gfx import build_background
 
         surf.blit(build_background("dusk", W, H), (0, 0))
@@ -180,7 +182,8 @@ class UI:
         surf.blit(hint, (120, 480))
 
         buttons = self.settings_layout(settings)
-        mouse = pygame.mouse.get_pos()
+        if mouse is None:
+            mouse = pygame.mouse.get_pos()
         for b in buttons:
             self._btn(surf, b, mouse)
         return buttons
@@ -217,14 +220,15 @@ class UI:
             Button(pygame.Rect(cx - 140, 400, 280, 50), "К уровням", "quit_levels"),
         ]
 
-    def draw_pause(self, surf: pygame.Surface) -> list[Button]:
+    def draw_pause(self, surf: pygame.Surface, mouse: tuple[int, int] | None = None) -> list[Button]:
         overlay = pygame.Surface((W, H), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 160))
         surf.blit(overlay, (0, 0))
         title = self.big.render("Пауза", True, (255, 255, 255))
         surf.blit(title, title.get_rect(center=(W // 2, 180)))
         buttons = self.pause_buttons()
-        mouse = pygame.mouse.get_pos()
+        if mouse is None:
+            mouse = pygame.mouse.get_pos()
         for b in buttons:
             self._btn(surf, b, mouse)
         return buttons
@@ -239,7 +243,14 @@ class UI:
             buttons.insert(0, Button(pygame.Rect(cx - 140, 230, 280, 50), "Дальше", "next"))
         return buttons
 
-    def draw_result(self, surf: pygame.Surface, won: bool, score: int, has_next: bool) -> list[Button]:
+    def draw_result(
+        self,
+        surf: pygame.Surface,
+        won: bool,
+        score: int,
+        has_next: bool,
+        mouse: tuple[int, int] | None = None,
+    ) -> list[Button]:
         overlay = pygame.Surface((W, H), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 150))
         surf.blit(overlay, (0, 0))
@@ -250,7 +261,8 @@ class UI:
         sc = self.font.render(f"Очки: {score}", True, (240, 240, 240))
         surf.blit(sc, sc.get_rect(center=(W // 2, 210)))
         buttons = self.result_buttons(won, has_next)
-        mouse = pygame.mouse.get_pos()
+        if mouse is None:
+            mouse = pygame.mouse.get_pos()
         for b in buttons:
             self._btn(surf, b, mouse)
         return buttons

@@ -13,6 +13,7 @@ from gfx import Audio, clear_gfx_caches, make_train_sprite, build_background
 from levels import LEVELS, W, H, get_level, signal_phase
 from settings import Settings
 from ui import UI, hit_button
+from viewport import Viewport, query_device_size
 
 IS_WEB = sys.platform == "emscripten"
 
@@ -23,8 +24,15 @@ class App:
         self.settings = Settings.load()
         if IS_WEB:
             self.settings.fullscreen = False
+        self.canvas = pygame.Surface((W, H))
+        dw, dh = query_device_size() if IS_WEB else (W, H)
         flags = pygame.FULLSCREEN if self.settings.fullscreen and not IS_WEB else 0
-        self.screen = pygame.display.set_mode((W, H), flags)
+        if IS_WEB:
+            self.screen = pygame.display.set_mode((dw, dh))
+            self.vp = Viewport(dw, dh)
+        else:
+            self.screen = pygame.display.set_mode((W, H), flags)
+            self.vp = Viewport.identity()
         pygame.display.set_caption("Поезд БЧ")
         self.clock = pygame.time.Clock()
         self.ui = UI()
@@ -41,6 +49,20 @@ class App:
         self._buttons: list = []
         self._slider_drag = False
         self.touch = TouchControls(visible=False)
+        self.touch.layout(self.vp.sw, self.vp.sh)
+
+    def _logical_mouse(self) -> tuple[int, int]:
+        return self.vp.to_logical(pygame.mouse.get_pos())
+
+    def _sync_display(self) -> None:
+        if not IS_WEB:
+            return
+        dw, dh = query_device_size()
+        if (dw, dh) == (self.vp.sw, self.vp.sh):
+            return
+        self.screen = pygame.display.set_mode((dw, dh))
+        self.vp.fit(dw, dh)
+        self.touch.layout(dw, dh)
 
     def apply_display(self) -> None:
         if IS_WEB:
@@ -48,6 +70,8 @@ class App:
             return
         flags = pygame.FULLSCREEN if self.settings.fullscreen else 0
         self.screen = pygame.display.set_mode((W, H), flags)
+        self.vp = Viewport.identity()
+        self.touch.layout(W, H)
         clear_gfx_caches()
 
     def fade_to(self, new_state: str) -> None:
@@ -66,17 +90,17 @@ class App:
             self.touch.reset()
         self.touch.visible = show
 
-    def _handle_ui_press(self, pos: tuple[int, int]) -> bool:
-        """Menu/settings/pause/result click. Returns whether app should keep running."""
+    def _handle_ui_press(self, logical_pos: tuple[int, int]) -> bool:
+        """Menu/settings/pause/result click in logical coords."""
         if self.state == "settings":
-            if self.ui.handle_slider_drag(self.settings, pos):
+            if self.ui.handle_slider_drag(self.settings, logical_pos):
                 self._slider_drag = True
                 self.audio.set_sfx_vol(self.settings.sfx_vol)
                 self.audio.set_music_vol(self.settings.music_vol)
                 return True
-            return self.handle_action(hit_button(self._buttons, pos))
+            return self.handle_action(hit_button(self._buttons, logical_pos))
         if self.state != "play":
-            return self.handle_action(hit_button(self._buttons, pos))
+            return self.handle_action(hit_button(self._buttons, logical_pos))
         return True
 
     def handle_action(self, action: str | None) -> bool:
@@ -99,7 +123,7 @@ class App:
                 self.fade_to("menu")
             elif action in ("diff", "fullscreen", "music", "sfx"):
                 self.settings = self.ui.handle_settings_click(
-                    action, self.settings, pygame.mouse.get_pos()
+                    action, self.settings, self._logical_mouse()
                 )
                 if action == "fullscreen":
                     self.apply_display()
@@ -176,44 +200,52 @@ class App:
                 self.touch.reset()
 
     def draw(self) -> None:
+        mouse = self._logical_mouse()
         if self.state == "menu":
-            self._buttons = self.ui.draw_menu(self.screen)
+            self._buttons = self.ui.draw_menu(self.canvas, mouse)
         elif self.state == "settings":
-            self._buttons = self.ui.draw_settings(self.screen, self.settings)
+            self._buttons = self.ui.draw_settings(self.canvas, self.settings, mouse)
         elif self.state == "levels":
-            self._buttons = self.ui.draw_levels(self.screen)
+            self._buttons = self.ui.draw_levels(self.canvas, mouse)
         elif self.state in ("play", "pause", "result") and self.game:
-            self.game.draw(self.screen, self.ui.font, show_hud=True)
+            self.game.draw(self.canvas, self.ui.font, show_hud=True)
             if self.state == "pause":
-                self._buttons = self.ui.draw_pause(self.screen)
+                self._buttons = self.ui.draw_pause(self.canvas, mouse)
             elif self.state == "result":
                 has_next = self.game.state == "win" and self.level_id < len(LEVELS)
                 self._buttons = self.ui.draw_result(
-                    self.screen, self.game.state == "win", self.game.score, has_next
+                    self.canvas, self.game.state == "win", self.game.score, has_next, mouse
                 )
             else:
                 self._buttons = []
-            if self.state in ("play", "pause"):
-                self.touch.draw(self.screen)
         else:
-            self.screen.fill((20, 30, 50))
+            self.canvas.fill((20, 30, 50))
             self._buttons = []
 
         if self.fade != 0:
             a = int(min(255, abs(self.fade) * 255))
             overlay = pygame.Surface((W, H), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, a))
-            self.screen.blit(overlay, (0, 0))
+            self.canvas.blit(overlay, (0, 0))
 
+        self.vp.present(self.screen, self.canvas)
+        if self.state in ("play", "pause"):
+            self.touch.draw(self.screen)
         pygame.display.flip()
 
     async def run(self) -> None:
         running = True
         while running:
+            self._sync_display()
             dt = self.clock.tick(FPS) / 1000.0
             for e in pygame.event.get():
                 if e.type == pygame.QUIT:
                     running = False
+                    continue
+                if e.type == pygame.VIDEORESIZE and IS_WEB:
+                    self.screen = pygame.display.set_mode((e.w, e.h))
+                    self.vp.fit(e.w, e.h)
+                    self.touch.layout(e.w, e.h)
                     continue
 
                 if self.touch.handle_event(e):
@@ -238,13 +270,13 @@ class App:
                         self.audio.play_theme("main")
                         self.state = "play"
                 elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
-                    running = self._handle_ui_press(e.pos)
+                    running = self._handle_ui_press(self.vp.to_logical(e.pos))
                 elif e.type == pygame.MOUSEBUTTONUP and e.button == 1:
                     if self._slider_drag:
                         self.settings.save()
                     self._slider_drag = False
                 elif e.type == pygame.MOUSEMOTION and self._slider_drag and self.state == "settings":
-                    self.ui.handle_slider_drag(self.settings, e.pos)
+                    self.ui.handle_slider_drag(self.settings, self.vp.to_logical(e.pos))
                     self.audio.set_sfx_vol(self.settings.sfx_vol)
                     self.audio.set_music_vol(self.settings.music_vol)
 
@@ -284,6 +316,12 @@ def _selfcheck() -> None:
 
     assert signal_phase(0.0, 0.0) == 0
     assert signal_phase(3.0, 0.0) == 2
+
+    from viewport import Viewport
+
+    vp = Viewport(1920, 1080)
+    assert vp.dw > 0 and vp.dh > 0
+    assert vp.to_logical((vp.ox, vp.oy)) == (0, 0)
 
     pygame.init()
     pygame.display.set_mode((1, 1))
@@ -328,6 +366,8 @@ def _selfcheck() -> None:
     from controls import InputState, TouchControls
 
     tc = TouchControls(visible=True)
+    tc.layout(1080, 2340)
+    assert tc.left_rect.w >= 110
     down = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"button": 1, "pos": tc.jump_rect.center})
     assert tc.handle_event(down)
     assert tc.poll().jump

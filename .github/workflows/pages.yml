@@ -30,7 +30,7 @@ jobs:
       - name: Build web
         run: |
           mkdir -p game
-          cp main.py game.py gfx.py levels.py settings.py ui.py controls.py favicon.png game/
+          cp main.py game.py gfx.py levels.py settings.py ui.py controls.py viewport.py favicon.png game/
           python -m pygbag \
             --build \
             --app_name lena2 \
